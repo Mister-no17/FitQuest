@@ -1,0 +1,40 @@
+import { describe,expect,it } from 'vitest'
+import { campaignDay } from './dates'
+import { adaptPlan, canAddWorkingSet, initialPlan, nextSetDecision, progressionAdvice, readiness, suggestLoad } from './engine'
+import type { CheckIn, Workout } from './types'
+
+const now='2026-11-21T04:00:00.000Z'
+const set=(reps:number,rir:number|null,index=0)=>({id:`s${index}`,exerciseId:'flat-db-press',setIndex:index,reps,durationSec:null,loadKg:10,loadBasis:'each' as const,rir,completed:true,revision:1})
+const workout=(date:string,sets=[set(12,2,0)]):Workout=>({id:`w-${date}-${sets.length}`,localDate:date,startedAt:now,endedAt:now,state:'completed',actualSets:sets,notes:''})
+
+describe('campaign dates',()=>{it('uses Asia/Kolkata local date boundaries',()=>{expect(campaignDay('2026-11-21')).toBe(1);expect(campaignDay('2026-12-20')).toBe(30)})})
+describe('campaign generation',()=>{
+  it('generates all 30 dated sessions',()=>{const plan=initialPlan(now);expect(plan.sessions).toHaveLength(30);expect(plan.sessions.at(-1)?.localDate).toBe('2026-12-20')})
+  it('mixes stable anchors with deliberate rotations',()=>{const plan=initialPlan(now),future=plan.sessions.find(s=>s.localDate==='2026-11-28')!;expect(future.prescriptions.some(p=>p.role==='anchor')).toBe(true);expect(future.prescriptions.some(p=>p.role==='rotation')).toBe(true)})
+})
+describe('progression',()=>{
+  it('does not increase after 12/10/8',()=>{expect(progressionAdvice('flat-db-press',[workout('2026-11-21',[set(12,2,0),set(10,1,1),set(8,0,2)])]).action).toBe('hold')})
+  it('requires known comfortable effort on two exposures',()=>{expect(progressionAdvice('flat-db-press',[workout('2026-11-21',[set(12,null)]),workout('2026-11-25',[set(12,null)])]).action).toBe('hold');expect(progressionAdvice('flat-db-press',[workout('2026-11-21'),workout('2026-11-25')]).action).toBe('consider_increment')})
+  it('detects excessive rep drop-off across sets',()=>{expect(progressionAdvice('flat-db-press',[workout('2026-11-21',[set(12,2,0),set(8,1,1)])]).reason).toContain('20%')})
+  it('deloads after four consistently missed targets',()=>{const rows=['21','24','27','30'].map(d=>workout(`2026-11-${d}`,[set(8,1)]));expect(progressionAdvice('flat-db-press',rows).action).toBe('deload')})
+})
+describe('readiness',()=>{
+  it('reports confidence from supplied observations',()=>{const check:CheckIn={id:'r',localDate:'2026-11-21',createdAt:now,sleepHours:8,energy:4,fatigue:2,soreness:{chest:1},pain:false,painMuscles:[],availableMinutes:60,weightKg:null,notes:''};const result=readiness(check);expect(result.label).toBe('Ready');expect(result.confidence).toBe('high');expect(result.targetRir).toBe(2)})
+  it('chooses recovery when multiple signals are poor',()=>{const check:CheckIn={id:'r',localDate:'2026-11-21',createdAt:now,sleepHours:4,energy:1,fatigue:5,soreness:{legs:5},pain:false,painMuscles:[],availableMinutes:60,weightKg:null,notes:''};expect(readiness(check).label).toBe('Recover')})
+  it('lets pain override otherwise good readiness',()=>{const check:CheckIn={id:'r',localDate:'2026-11-21',createdAt:now,sleepHours:8,energy:5,fatigue:1,soreness:{},pain:true,painMuscles:['shoulders'],availableMinutes:60,weightKg:null,notes:''};expect(readiness(check).label).toBe('Safety first')})
+})
+describe('adaptation',()=>{
+  it('shortens time by removing accessories',()=>{const check:CheckIn={id:'c',localDate:'2026-11-21',createdAt:now,sleepHours:null,energy:null,fatigue:null,soreness:{},pain:false,painMuscles:[],availableMinutes:30,weightKg:null,notes:''};const plan=adaptPlan({today:'2026-11-21',current:initialPlan(now),workouts:[],checkIns:[check],nowIso:now});expect(plan.sessions[0].durationMin).toBe(30);expect(plan.sessions[0].prescriptions.length).toBeLessThan(6)})
+  it('moves a confirmed miss without creating a double session',()=>{const current=initialPlan(now);current.sessions[1].state='missed';const plan=adaptPlan({today:'2026-11-23',current,workouts:[],checkIns:[],nowIso:now});expect(plan.sessions[2].title).toBe('Back, biceps & core');expect(plan.sessions[2].rationale.join(' ')).toContain('no double session')})
+  it('removes painful muscle loading',()=>{const check:CheckIn={id:'c',localDate:'2026-11-21',createdAt:now,sleepHours:7,energy:3,fatigue:3,soreness:{},pain:true,painMuscles:['shoulders'],availableMinutes:60,weightKg:null,notes:''};const plan=adaptPlan({today:'2026-11-21',current:initialPlan(now),workouts:[],checkIns:[check],nowIso:now});expect(plan.sessions[0].prescriptions.some(p=>p.exerciseId==='db-shoulder-press')).toBe(false)})
+  it('turns illness into recovery without required activity',()=>{const check:CheckIn={id:'c',localDate:'2026-11-21',createdAt:now,sleepHours:null,energy:null,fatigue:null,soreness:{},pain:false,painMuscles:[],availableMinutes:null,unavailableReason:'illness',weightKg:null,notes:''};const plan=adaptPlan({today:'2026-11-21',current:initialPlan(now),workouts:[],checkIns:[check],nowIso:now});expect(plan.sessions[0].kind).toBe('recovery');expect(plan.sessions[0].prescriptions).toHaveLength(0);expect(plan.sessions[0].cardio).toContain('No activity required')})
+  it('converts poor multi-signal readiness to recovery',()=>{const check:CheckIn={id:'c',localDate:'2026-11-21',createdAt:now,sleepHours:4,energy:1,fatigue:5,soreness:{chest:5},pain:false,painMuscles:[],availableMinutes:60,weightKg:null,notes:''};const plan=adaptPlan({today:'2026-11-21',current:initialPlan(now),workouts:[],checkIns:[check],nowIso:now});expect(plan.sessions[0].kind).toBe('recovery')})
+  it('raises the next load after an easy set',()=>{const easy={...set(12,4),feedback:'too_easy' as const};expect(suggestLoad('flat-db-press',[workout('2026-11-21',[easy])],12).action).toBe('increase')})
+  it('reduces load after form breakdown',()=>{const poor={...set(8,1),feedback:'form_broke' as const};expect(suggestLoad('flat-db-press',[workout('2026-11-21',[poor])],12).loadKg).toBeLessThan(10)})
+  it('allows only safe optional volume',()=>{const good={...set(12,3),setKind:'working' as const,feedback:'good' as const};expect(canAddWorkingSet([good,good],2)).toBe(true);expect(canAddWorkingSet([{...good,feedback:'hard'}],1)).toBe(false)})
+  it('does not count calibration toward optional volume',()=>{const calibration={...set(12,4),setKind:'calibration' as const,feedback:'too_easy' as const};expect(canAddWorkingSet([calibration],1)).toBe(false)})
+  it('stops immediately after pain feedback',()=>{const painful={...set(6,0),feedback:'pain' as const,setKind:'working' as const};expect(nextSetDecision('flat-db-press',[painful],2,[]).action).toBe('stop')})
+  it('ends an exercise after large rep drop-off',()=>{const sets=[{...set(12,2,0),setKind:'working' as const,feedback:'good' as const},{...set(8,1,1),setKind:'working' as const,feedback:'hard' as const}];expect(nextSetDecision('flat-db-press',sets,3,[]).continueExercise).toBe(false)})
+  it('reduces a recommendation after a long training gap',()=>{const prior=workout('2026-10-01',[set(12,2)]);const advice=suggestLoad('flat-db-press',[prior],12,[],'2026-11-21');expect(advice.action).toBe('reduce');expect(advice.evidence.join(' ')).toContain('gap')})
+  it('substitutes a painful exercise instead of repeating it',()=>{const painful={...set(8,0),feedback:'pain' as const},prior=workout('2026-12-04',[painful]),plan=adaptPlan({today:'2026-12-05',current:initialPlan(now),workouts:[prior],checkIns:[],nowIso:now}),session=plan.sessions.find(s=>s.localDate==='2026-12-05')!;expect(session.prescriptions.some(p=>p.exerciseId==='flat-db-press')).toBe(false);expect(session.prescriptions.some(p=>p.selectionReason?.includes('pain'))).toBe(true)})
+})

@@ -1,0 +1,10 @@
+{
+  "name": "FitQuest — Personal Fitness OS",
+  "short_name": "FitQuest",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f8fc",
+  "theme_color": "#7254d7",
+  "description": "Private, local-first adaptive fitness trainer",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
