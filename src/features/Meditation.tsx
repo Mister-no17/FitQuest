@@ -23,7 +23,6 @@ import {
 import type { AppSettings, MeditationSession } from "../domain/types";
 import {
   browseSpotify,
-  connectSpotify,
   pauseSpotify,
   playSpotifyPlaylist,
   spotifyNativeAvailable,
@@ -114,7 +113,6 @@ export default function Meditation({
         return setSpotifyMessage("Save a meditation playlist first.");
       setSpotifyBusy(true);
       try {
-        await connectSpotify();
         await playSpotifyPlaylist(settings.spotifyMeditationPlaylist);
       } catch (error) {
         setSpotifyMessage(
@@ -151,7 +149,6 @@ export default function Meditation({
     setSpotifyBusy(true);
     setSpotifyMessage("");
     try {
-      await connectSpotify();
       const result = await browseSpotify(item);
       setSpotifyItems(result.items);
       setSpotifyTrail(trail);
@@ -360,7 +357,7 @@ export default function Meditation({
               disabled={!spotifyNativeAvailable() || spotifyBusy}
               onClick={() => loadSpotify(undefined, [])}
             >
-              {spotifyBusy ? "Opening Spotify…" : "Browse my Spotify"}
+              {spotifyBusy ? "Loading playlists…" : "Browse my Spotify"}
             </button>
           ) : (
             <>

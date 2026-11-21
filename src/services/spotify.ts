@@ -6,6 +6,10 @@ interface SpotifyNativePlugin {
   pause(): Promise<void>;
   resume(): Promise<void>;
   status(): Promise<{ connected: boolean }>;
+  openApp(): Promise<void>;
+  openPlaylist(options: { uri: string }): Promise<void>;
+  authorizeLibrary(): Promise<{ authorized: boolean }>;
+  library(): Promise<{ items: SpotifyContentItem[] }>;
   browse(
     options?: Partial<SpotifyContentItem>,
   ): Promise<{ items: SpotifyContentItem[] }>;
@@ -47,7 +51,7 @@ export async function connectSpotify() {
 }
 export async function playSpotifyPlaylist(link: string) {
   requireNative();
-  await Spotify.play({ uri: spotifyPlaylistUri(link) });
+  await Spotify.openPlaylist({ uri: spotifyPlaylistUri(link) });
 }
 export async function pauseSpotify() {
   requireNative();
@@ -63,5 +67,16 @@ export async function spotifyStatus() {
 }
 export async function browseSpotify(item?: SpotifyContentItem) {
   requireNative();
-  return Spotify.browse(item);
+  if (item?.hasChildren) return Spotify.browse(item);
+  try {
+    return await Spotify.library();
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("SPOTIFY_AUTH_REQUIRED")) throw error;
+    await Spotify.authorizeLibrary();
+    return Spotify.library();
+  }
+}
+export async function openSpotifyApp() {
+  requireNative();
+  return Spotify.openApp();
 }
