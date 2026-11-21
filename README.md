@@ -1,6 +1,6 @@
 # FitQuest
 
-Private, single-user adaptive fitness trainer. The local-first app implements a deterministic training system: a complete 30-day anchor-and-rotation plan, readiness scoring, exercise-specific load estimation, set-by-set autoregulation, recovery and pain safeguards, expected-versus-performed workout energy ranges, plan history, XP, measurements, activity, manual nutrition, weekly review, workout history, backup/import, Android packaging, and light/dark modes. Every catalog exercise includes both a looping movement demonstration and a selected YouTube technique guide.
+Private, single-user adaptive fitness trainer. The local-first app implements a deterministic training system: a complete 30-day anchor-and-rotation plan, readiness scoring, exercise-specific load estimation, set-by-set autoregulation, recovery and pain safeguards, a guided muscle-specific post-workout cooldown, expected-versus-performed workout energy ranges, plan history, XP, measurements, activity, manual nutrition, weekly review, workout history, backup/import, Android packaging, and light/dark modes. Every catalog exercise includes both a looping movement demonstration and a selected YouTube technique guide.
 
 ## Run
 

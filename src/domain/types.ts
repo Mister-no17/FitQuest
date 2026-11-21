@@ -23,7 +23,9 @@ export interface WorkoutEnergyEstimate {
   plannedKcal:number; plannedLowKcal:number; plannedHighKcal:number; plannedMinutes:number;
   actualKcal:number; actualLowKcal:number; actualHighKcal:number; actualMinutes:number;
 }
-export interface Workout { id:string; planSessionId?:string; localDate:string; startedAt:string; endedAt?:string; restUntil?:string; state:'in_progress'|'completed'|'partial'; actualSets:ActualSet[]; notes:string; difficulty?:number; energyEstimate?:WorkoutEnergyEstimate }
+export interface CooldownStepLog { id:string; state:'pending'|'completed'|'skipped'; completedAt?:string }
+export interface CooldownLog { startedAt:string; completedAt?:string; steps:CooldownStepLog[] }
+export interface Workout { id:string; planSessionId?:string; localDate:string; startedAt:string; endedAt?:string; restUntil?:string; state:'in_progress'|'completed'|'partial'; actualSets:ActualSet[]; notes:string; difficulty?:number; energyEstimate?:WorkoutEnergyEstimate; cooldown?:CooldownLog }
 export interface CheckIn { id:string; localDate:string; createdAt:string; sleepHours:number|null; energy:number|null; fatigue:number|null; soreness:Partial<Record<Muscle,number>>; pain:boolean; painMuscles:Muscle[]; availableMinutes:number|null; unavailableReason?:'travel'|'illness'|'schedule'|null; weightKg:number|null; notes:string }
 export interface XPEvent { id:string; localDate:string; key:string; amount:number; reason:string }
 export type MetricType = 'weight'|'waist'|'chest'|'shoulders'|'body_fat'
