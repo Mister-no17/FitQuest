@@ -32,7 +32,7 @@ import org.json.JSONObject;
 
 @CapacitorPlugin(name = "Spotify")
 public class SpotifyPlugin extends Plugin {
-    private static final String CLIENT_ID = "33c7698e0b514f2a8f382c1c534d7b4d";
+    private static final String CLIENT_ID = "5e89981642fc4b46894ee8de4c291c34";
     private static final String REDIRECT_URI = "fitquest-personal://spotify-callback";
     private SpotifyAppRemote remote;
     private String libraryToken;
