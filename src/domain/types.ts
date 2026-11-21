@@ -7,7 +7,8 @@ export interface Profile {
 }
 export interface Campaign { id:string; startDate:string; endDate:string; policyVersion:string }
 export interface Exercise {
-  id:string; name:string; equipment:string; primary:Muscle[]; secondary:Muscle[]; targetReps:number; timed?:boolean; cue:string; restSec:number
+  id:string; name:string; equipment:string; primary:Muscle[]; secondary:Muscle[]; targetReps:number; timed?:boolean; cue:string; restSec:number;
+  availableInGym?:boolean; availableLoadsKg?:number[]; defaultLoadBasis?:'each'|'total'|'bodyweight'
 }
 export interface Prescription { exerciseId:string; sets:number; targetReps:number; loadKg:number|null; loadBasis:'each'|'total'|'bodyweight'|null; restSec:number; role?:'anchor'|'rotation'; selectionReason?:string }
 export interface PlannedSession {

@@ -13,7 +13,7 @@ const median=(values:number[])=>{const sorted=[...values].sort((a,b)=>a-b),middl
 const daysBetween=(a:string,b:string)=>Math.round((Date.parse(`${b}T12:00:00Z`)-Date.parse(`${a}T12:00:00Z`))/86400000)
 const clamp=(n:number,min:number,max:number)=>Math.max(min,Math.min(max,n))
 
-export const initialPlan=(nowIso:string):PlanVersion=>({id:'plan-v1',createdAt:nowIso,trigger:'campaign_seed_v3',sessions:cloneSessions(campaignSessions),explanations:['Complete 30-day hybrid plan: stable anchors with deliberate accessory rotation','Loads are learned from calibration and actual performance rather than body-size guesses']})
+export const initialPlan=(nowIso:string):PlanVersion=>({id:'plan-gym-v4',createdAt:nowIso,trigger:'gym_equipment_v4',sessions:cloneSessions(campaignSessions),explanations:['Complete 30-day plan using only equipment confirmed at your gym','Loads are learned from calibration and actual performance, then snapped to equipment you can actually select']})
 
 export function readiness(check?:CheckIn,recent:CheckIn[]=[]):ReadinessResult{
   if(!check)return {score:null,confidence:'none',label:'Not checked in',volumeMultiplier:1,targetRir:3,reasons:['Readiness is unknown until you check in']}
@@ -82,23 +82,28 @@ export function adaptPlan(input:EngineInput):PlanVersion{
 }
 
 function exerciseHistory(exerciseId:string,workouts:Workout[]){return workouts.filter(w=>w.state!=='in_progress').sort((a,b)=>a.localDate.localeCompare(b.localDate)).map(w=>({date:w.localDate,sets:workingSets(w.actualSets).filter(s=>s.exerciseId===exerciseId&&s.loadKg!==null)})).filter(x=>x.sets.length)}
-function loadStep(equipment:string,load:number){if(equipment==='Dumbbells')return load<10?.5:1;if(equipment==='Cable'||equipment==='Machine')return 2.5;return load<20?1:2.5}
-function roundLoad(value:number,equipment:string,current=0){const step=loadStep(equipment,current||value);return Math.max(step,Math.round(value/step)*step)}
+function availableLoad(value:number,loads:number[]|undefined,direction:'nearest'|'lower'|'higher'='nearest'){
+  if(!loads?.length)return Math.max(.5,Math.round(value*2)/2)
+  const sorted=[...loads].sort((a,b)=>a-b)
+  if(direction==='lower')return [...sorted].reverse().find(x=>x<value)??sorted[0]
+  if(direction==='higher')return sorted.find(x=>x>value)??sorted.at(-1)!
+  return sorted.reduce((best,x)=>Math.abs(x-value)<Math.abs(best-value)?x:best)
+}
 
 export function suggestLoad(exerciseId:string,workouts:Workout[],targetReps:number,currentSets:ActualSet[]=[],asOfDate?:string,targetRir=2):LoadSuggestion{
   const exercise=exerciseById[exerciseId]
-  if(!exercise||exercise.equipment==='Bodyweight')return {loadKg:null,confidence:'high',action:'hold',reason:'Use a controlled bodyweight variation that leaves clean repetitions available.',evidence:['Bodyweight movement'],estimatedMaxKg:null,targetRir}
+  if(!exercise||exercise.defaultLoadBasis==='bodyweight'||exercise.equipment==='Bodyweight')return {loadKg:null,confidence:'high',action:'hold',reason:'Use a controlled bodyweight variation that leaves clean repetitions available.',evidence:['Bodyweight movement'],estimatedMaxKg:null,targetRir}
   const live=currentSets.filter(s=>s.exerciseId===exerciseId&&s.completed).at(-1),history=exerciseHistory(exerciseId,workouts),historicalSets=history.flatMap(x=>x.sets),source=live?.loadKg?live:historicalSets.at(-1)
   if(!source?.loadKg)return {loadKg:null,confidence:'calibrate',action:'start',reason:'No reliable same-exercise history exists. Use one conservative calibration set rather than guessing from body weight or another exercise.',evidence:['0 comparable working sets'],estimatedMaxKg:null,targetRir}
   if(source.feedback==='pain')return {loadKg:null,confidence:'high',action:'stop',reason:'Pain was reported. Stop this movement; changing the load is not an adequate safety response.',evidence:['Pain feedback'],estimatedMaxKg:null,targetRir:4}
-  const step=loadStep(exercise.equipment,source.loadKg),lower=(factor:number)=>roundLoad(Math.min(source.loadKg!-step,source.loadKg!*factor),exercise.equipment,source.loadKg!),higher=(factor:number)=>roundLoad(Math.max(source.loadKg!+step,source.loadKg!*factor),exercise.equipment,source.loadKg!)
+  const lower=(_factor:number)=>availableLoad(source.loadKg!,exercise.availableLoadsKg,'lower'),higher=(_factor:number)=>availableLoad(source.loadKg!,exercise.availableLoadsKg,'higher')
   if(source.feedback==='form_broke')return {loadKg:lower(.9),confidence:'high',action:'reduce',reason:'Technique broke down. Reduce roughly 10% and only continue with a clean range of motion.',evidence:['Form breakdown on latest set'],estimatedMaxKg:null,targetRir:3}
   if(source.feedback==='hard'||(source.rir!==null&&source.rir<=1))return {loadKg:lower(.95),confidence:historicalSets.length>=3?'medium':'low',action:'reduce',reason:'The latest set was too close to failure for the current target. Use the next lower practical load.',evidence:[`${source.reps??'Unknown'} reps`,`${source.rir??'Unknown'} RIR`],estimatedMaxKg:null,targetRir}
   if(source.feedback==='too_easy'||(source.rir!==null&&source.rir>=4))return {loadKg:higher(1.075),confidence:live?'medium':historicalSets.length>=3?'medium':'low',action:'increase',reason:'The latest comparable set left at least four repetitions available. Try one practical increment.',evidence:[`${source.reps??'Unknown'} reps`,`${source.rir??'4+'} RIR`],estimatedMaxKg:null,targetRir}
   const valid=historicalSets.filter(s=>s.loadKg&&s.reps&&s.reps>=3&&s.reps<=20&&s.feedback!=='form_broke'&&s.feedback!=='pain'),maxes=valid.slice(-8).map(s=>s.loadKg!*(1+((s.reps||targetReps)+(s.rir??2))/30)),estimatedMax=maxes.length?median(maxes):source.loadKg*(1+((source.reps||targetReps)+(source.rir??2))/30)
-  let suggested=roundLoad(estimatedMax/(1+(targetReps+targetRir)/30),exercise.equipment,source.loadKg),confidence:LoadSuggestion['confidence']=history.length>=4&&valid.filter(s=>s.rir!==null).length>=4?'high':history.length>=2?'medium':'low'
+  let suggested=availableLoad(estimatedMax/(1+(targetReps+targetRir)/30),exercise.availableLoadsKg),confidence:LoadSuggestion['confidence']=history.length>=4&&valid.filter(s=>s.rir!==null).length>=4?'high':history.length>=2?'medium':'low'
   const evidence=[`${history.length} comparable exposure${history.length===1?'':'s'}`,`${valid.length} usable set${valid.length===1?'':'s'}`,`Estimated max ${estimatedMax.toFixed(1)} kg`]
-  if(asOfDate&&history.at(-1)){const gap=daysBetween(history.at(-1)!.date,asOfDate);if(gap>=42){suggested=roundLoad(suggested*.85,exercise.equipment,suggested);evidence.push(`${gap}-day gap: 15% return reduction`);confidence='low'}else if(gap>=21){suggested=roundLoad(suggested*.9,exercise.equipment,suggested);evidence.push(`${gap}-day gap: 10% return reduction`);confidence='low'}}
+  if(asOfDate&&history.at(-1)){const gap=daysBetween(history.at(-1)!.date,asOfDate);if(gap>=42){suggested=availableLoad(suggested*.85,exercise.availableLoadsKg);evidence.push(`${gap}-day gap: 15% return reduction`);confidence='low'}else if(gap>=21){suggested=availableLoad(suggested*.9,exercise.availableLoadsKg);evidence.push(`${gap}-day gap: 10% return reduction`);confidence='low'}}
   const recent=history.slice(-2),repeatSuccess=recent.length===2&&recent.every(x=>x.sets.every(s=>(s.reps??0)>=targetReps&&(s.rir??-1)>=2&&s.feedback!=='form_broke'))
   if(!repeatSuccess&&suggested>source.loadKg)suggested=source.loadKg
   const action=suggested>source.loadKg?'increase':suggested<source.loadKg?'reduce':'hold',reason=action==='increase'?'Two recent exposures met the rep target with clean repetitions in reserve; use the smallest practical increase.':action==='reduce'?'Recent performance, effort, or time away supports a conservative reduction.':'Keep the load and improve rep quality or consistency before increasing.'

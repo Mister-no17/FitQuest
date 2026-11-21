@@ -27,6 +27,18 @@ const guides:Record<string,Guide>={
   'reverse-pec-deck':{mediaId:'myfUsKf',mediaName:'Lever seated reverse fly',videoId:'LzsSQzHFuLU',videoTitle:'Reverse pec deck setup and form',channel:'Hypertrophy Coach'},
   'dead-bug':{mediaId:'iny3m5y',mediaName:'Dead bug',videoId:'-gRN_JyVTLY',videoTitle:'Dead bug form and regressions',channel:'Jack Hanrahan Fitness'},
   'side-plank':{mediaId:'5VXmnV5',mediaName:'Side plank',videoId:'iNbH7_edNI8',videoTitle:'Side plank proper form and technique',channel:'Runna'},
+  'barbell-bench-press':{mediaId:'EIeI8Vf',mediaName:'Barbell bench press',videoId:'CayG6UYqL8g',videoTitle:'Barbell bench press proper form',channel:'NASM'},
+  'db-fly':{mediaId:'yz9nUhF',mediaName:'Dumbbell fly',videoId:'eozdVDA78K0',videoTitle:'Dumbbell fly exercise tutorial',channel:'Jeff Nippard'},
+  'barbell-triceps-extension':{mediaId:'h8LFzo9',mediaName:'Lying barbell triceps extension',videoId:'d_KZxkY_0cM',videoTitle:'Lying triceps extension form',channel:'ATHLEAN-X'},
+  'one-arm-db-row':{mediaId:'C0MA9bC',mediaName:'One-arm dumbbell row',videoId:'gfUg6qWohTk',videoTitle:'One-arm dumbbell row form',channel:'ATHLEAN-X'},
+  'barbell-bent-row':{mediaId:'eZyBC3j',mediaName:'Barbell bent-over row',videoId:'bm0_q9bR_HA',videoTitle:'Barbell bent-over row proper form',channel:'NASM'},
+  'db-rear-delt-raise':{mediaId:'mu5Guxt',mediaName:'Dumbbell rear-delt raise',videoId:'ttvfGg9d76c',videoTitle:'Bent-over dumbbell reverse fly',channel:'ScottHermanFitness'},
+  'ez-bar-curl':{mediaId:'6TG6x2w',mediaName:'EZ-bar curl',videoId:'zG2xJ0Q5QtI',videoTitle:'EZ-bar curl proper form',channel:'Bodybuilding.com'},
+  'barbell-back-squat':{mediaId:'qXTaZnJ',mediaName:'Barbell back squat',videoId:'SW_C1A-rejs',videoTitle:'How to squat properly',channel:'Squat University'},
+  'db-step-up':{mediaId:'aXtJhlg',mediaName:'Dumbbell step-up',videoId:'9ZknEYboBOQ',videoTitle:'Dumbbell step-up proper form',channel:'NASM'},
+  'barbell-glute-bridge':{mediaId:'qKBpF7I',mediaName:'Barbell glute bridge',videoId:'wPM8icPu6H8',videoTitle:'Barbell glute bridge tutorial',channel:'Bret Contreras'},
+  'db-standing-calf-raise':{mediaId:'dPmaUaU',mediaName:'Dumbbell standing calf raise',videoId:'wxwY7GXxL4k',videoTitle:'Standing calf raise proper form',channel:'NASM'},
+  'captains-chair-leg-raise':{mediaId:'weoDEpH',mediaName:'Captain’s chair knee raise',videoId:'Pr1ieGZ5atk',videoTitle:'Captain’s chair knee raise tutorial',channel:'LivestrongWoman'},
 }
 
 export default function ExerciseGuide({exercise}:{exercise:Exercise}){

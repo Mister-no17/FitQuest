@@ -1,6 +1,7 @@
 import { describe,expect,it } from 'vitest'
 import { campaignDay } from './dates'
 import { adaptPlan, canAddWorkingSet, initialPlan, nextSetDecision, progressionAdvice, readiness, suggestLoad } from './engine'
+import { exerciseById, migratePlanForGymEquipment } from './catalog'
 import type { CheckIn, Workout } from './types'
 
 const now='2026-11-21T04:00:00.000Z'
@@ -11,6 +12,8 @@ describe('campaign dates',()=>{it('uses Asia/Kolkata local date boundaries',()=>
 describe('campaign generation',()=>{
   it('generates all 30 dated sessions',()=>{const plan=initialPlan(now);expect(plan.sessions).toHaveLength(30);expect(plan.sessions.at(-1)?.localDate).toBe('2026-12-20')})
   it('mixes stable anchors with deliberate rotations',()=>{const plan=initialPlan(now),future=plan.sessions.find(s=>s.localDate==='2026-11-28')!;expect(future.prescriptions.some(p=>p.role==='anchor')).toBe(true);expect(future.prescriptions.some(p=>p.role==='rotation')).toBe(true)})
+  it('uses only confirmed gym equipment in every new session',()=>{const ids=initialPlan(now).sessions.flatMap(s=>s.prescriptions.map(p=>p.exerciseId));expect(ids.every(id=>exerciseById[id].availableInGym)).toBe(true)})
+  it('preserves a logged day exactly while replacing unstarted days',()=>{const old=initialPlan(now);old.sessions[0]={...old.sessions[0],id:'old-day-one',prescriptions:[{exerciseId:'pec-deck',sets:2,targetReps:12,loadKg:null,loadBasis:null,restSec:75}]};old.sessions[1]={...old.sessions[1],id:'old-day-two',prescriptions:[{exerciseId:'lat-pulldown',sets:2,targetReps:12,loadKg:null,loadBasis:null,restSec:90}]};const logged:Workout={...workout('2026-11-21'),planSessionId:'old-day-one',state:'in_progress'};const migrated=migratePlanForGymEquipment(old.sessions,[logged]);expect(migrated[0]).toEqual(old.sessions[0]);expect(migrated[1].prescriptions.some(p=>p.exerciseId==='lat-pulldown')).toBe(false)})
 })
 describe('progression',()=>{
   it('does not increase after 12/10/8',()=>{expect(progressionAdvice('flat-db-press',[workout('2026-11-21',[set(12,2,0),set(10,1,1),set(8,0,2)])]).action).toBe('hold')})
@@ -30,6 +33,7 @@ describe('adaptation',()=>{
   it('turns illness into recovery without required activity',()=>{const check:CheckIn={id:'c',localDate:'2026-11-21',createdAt:now,sleepHours:null,energy:null,fatigue:null,soreness:{},pain:false,painMuscles:[],availableMinutes:null,unavailableReason:'illness',weightKg:null,notes:''};const plan=adaptPlan({today:'2026-11-21',current:initialPlan(now),workouts:[],checkIns:[check],nowIso:now});expect(plan.sessions[0].kind).toBe('recovery');expect(plan.sessions[0].prescriptions).toHaveLength(0);expect(plan.sessions[0].cardio).toContain('No activity required')})
   it('converts poor multi-signal readiness to recovery',()=>{const check:CheckIn={id:'c',localDate:'2026-11-21',createdAt:now,sleepHours:4,energy:1,fatigue:5,soreness:{chest:5},pain:false,painMuscles:[],availableMinutes:60,weightKg:null,notes:''};const plan=adaptPlan({today:'2026-11-21',current:initialPlan(now),workouts:[],checkIns:[check],nowIso:now});expect(plan.sessions[0].kind).toBe('recovery')})
   it('raises the next load after an easy set',()=>{const easy={...set(12,4),feedback:'too_easy' as const};expect(suggestLoad('flat-db-press',[workout('2026-11-21',[easy])],12).action).toBe('increase')})
+  it('snaps dumbbell recommendations to the actual rack',()=>{const easy={...set(12,4),feedback:'too_easy' as const};expect(suggestLoad('flat-db-press',[workout('2026-11-21',[easy])],12).loadKg).toBe(12.5)})
   it('reduces load after form breakdown',()=>{const poor={...set(8,1),feedback:'form_broke' as const};expect(suggestLoad('flat-db-press',[workout('2026-11-21',[poor])],12).loadKg).toBeLessThan(10)})
   it('allows only safe optional volume',()=>{const good={...set(12,3),setKind:'working' as const,feedback:'good' as const};expect(canAddWorkingSet([good,good],2)).toBe(true);expect(canAddWorkingSet([{...good,feedback:'hard'}],1)).toBe(false)})
   it('does not count calibration toward optional volume',()=>{const calibration={...set(12,4),setKind:'calibration' as const,feedback:'too_easy' as const};expect(canAddWorkingSet([calibration],1)).toBe(false)})
