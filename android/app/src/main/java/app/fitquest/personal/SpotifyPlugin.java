@@ -4,14 +4,13 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
-import androidx.activity.result.ActivityResult;
+import android.util.Base64;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
-import com.getcapacitor.annotation.ActivityCallback;
 import com.spotify.android.appremote.api.ConnectionParams;
 import com.spotify.android.appremote.api.Connector;
 import com.spotify.android.appremote.api.SpotifyAppRemote;
@@ -19,13 +18,16 @@ import com.spotify.android.appremote.api.ContentApi;
 import com.spotify.protocol.types.ImageUri;
 import com.spotify.protocol.types.ListItem;
 import com.spotify.protocol.types.ListItems;
-import com.spotify.sdk.android.auth.AuthorizationClient;
-import com.spotify.sdk.android.auth.AuthorizationRequest;
-import com.spotify.sdk.android.auth.AuthorizationResponse;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -37,51 +39,62 @@ public class SpotifyPlugin extends Plugin {
     private SpotifyAppRemote remote;
     private String libraryToken;
     private long libraryTokenExpiresAt;
+    private String refreshToken;
+    private String pkceVerifier;
+    private String pkceState;
+    private PluginCall pendingAuthorization;
 
     @PluginMethod
     public void authorizeLibrary(PluginCall call) {
+        loadStoredTokens();
         if (libraryToken != null && System.currentTimeMillis() < libraryTokenExpiresAt - 60000) {
             JSObject result = new JSObject(); result.put("authorized", true); call.resolve(result); return;
         }
-        AuthorizationRequest request = new AuthorizationRequest.Builder(
-            CLIENT_ID, AuthorizationResponse.Type.TOKEN, REDIRECT_URI
-        ).setScopes(new String[]{"playlist-read-private", "playlist-read-collaborative"})
-         .setShowDialog(false).build();
-        Intent intent = AuthorizationClient.createLoginActivityIntent(getActivity(), request);
-        startActivityForResult(call, intent, "handleLibraryAuthorization");
+        try {
+            byte[] verifierBytes = new byte[64], stateBytes = new byte[24]; new SecureRandom().nextBytes(verifierBytes); new SecureRandom().nextBytes(stateBytes);
+            pkceVerifier = Base64.encodeToString(verifierBytes, Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
+            pkceState = Base64.encodeToString(stateBytes, Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
+            String challenge = Base64.encodeToString(MessageDigest.getInstance("SHA-256").digest(pkceVerifier.getBytes(StandardCharsets.US_ASCII)), Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
+            String url = "https://accounts.spotify.com/authorize?client_id=" + encode(CLIENT_ID) + "&response_type=code&redirect_uri=" + encode(REDIRECT_URI)
+                + "&scope=" + encode("playlist-read-private playlist-read-collaborative") + "&code_challenge_method=S256&code_challenge=" + encode(challenge) + "&state=" + encode(pkceState);
+            pendingAuthorization = call; call.setKeepAlive(true);
+            getActivity().startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+        } catch (Exception error) { call.reject("Could not start Spotify login.", asException(error)); }
     }
 
-    @ActivityCallback
-    private void handleLibraryAuthorization(PluginCall call, ActivityResult result) {
-        if (call == null) return;
-        AuthorizationResponse response = AuthorizationClient.getResponse(result.getResultCode(), result.getData());
-        if (response.getType() == AuthorizationResponse.Type.TOKEN && response.getAccessToken() != null) {
-            libraryToken = response.getAccessToken();
-            libraryTokenExpiresAt = System.currentTimeMillis() + Math.max(60, response.getExpiresIn()) * 1000L;
-            JSObject output = new JSObject(); output.put("authorized", true); call.resolve(output); return;
-        }
-        String message = response.getError();
-        call.reject(message == null || message.isBlank() ? "Spotify access was not granted." : message);
+    @Override
+    protected void handleOnNewIntent(Intent intent) {
+        Uri data = intent.getData(); PluginCall call = pendingAuthorization;
+        if (call == null || data == null || !"fitquest-personal".equals(data.getScheme()) || !"spotify-callback".equals(data.getHost())) return;
+        String returnedState = data.getQueryParameter("state"), code = data.getQueryParameter("code"), error = data.getQueryParameter("error");
+        if (error != null) { finishAuthorization(call); call.reject("Spotify login was not approved: " + error); return; }
+        if (returnedState == null || !returnedState.equals(pkceState) || code == null) { finishAuthorization(call); call.reject("Spotify returned an invalid login response."); return; }
+        new Thread(() -> {
+            try {
+                JSONObject token = requestToken("grant_type=authorization_code&code=" + encode(code) + "&redirect_uri=" + encode(REDIRECT_URI) + "&client_id=" + encode(CLIENT_ID) + "&code_verifier=" + encode(pkceVerifier));
+                saveTokens(token); getActivity().runOnUiThread(() -> { finishAuthorization(call); JSObject output = new JSObject(); output.put("authorized", true); call.resolve(output); });
+            } catch (Exception failure) { getActivity().runOnUiThread(() -> { finishAuthorization(call); call.reject(failure.getMessage() == null ? "Spotify login failed." : failure.getMessage(), asException(failure)); }); }
+        }).start();
     }
 
     @PluginMethod
     public void library(PluginCall call) {
-        if (libraryToken == null || System.currentTimeMillis() >= libraryTokenExpiresAt) {
-            call.reject("SPOTIFY_AUTH_REQUIRED"); return;
-        }
         new Thread(() -> {
             HttpURLConnection connection = null;
             try {
+                if (!ensureAccessToken()) { getActivity().runOnUiThread(() -> call.reject("SPOTIFY_AUTH_REQUIRED")); return; }
                 connection = (HttpURLConnection) new URL("https://api.spotify.com/v1/me/playlists?limit=50").openConnection();
                 connection.setRequestProperty("Authorization", "Bearer " + libraryToken);
                 connection.setRequestProperty("Accept", "application/json");
                 connection.setConnectTimeout(10000); connection.setReadTimeout(10000);
                 int status = connection.getResponseCode();
                 if (status == 401) {
-                    libraryToken = null;
+                    clearTokens();
                     getActivity().runOnUiThread(() -> call.reject("SPOTIFY_AUTH_REQUIRED")); return;
                 }
-                if (status < 200 || status >= 300) throw new Exception("Spotify returned error " + status + ".");
+                if (status < 200 || status >= 300) {
+                    String detail = readResponse(connection, true); throw new Exception("Spotify returned " + status + (detail.isBlank() ? "." : ": " + detail));
+                }
                 StringBuilder body = new StringBuilder();
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
                     String line; while ((line = reader.readLine()) != null) body.append(line);
@@ -102,6 +115,56 @@ public class SpotifyPlugin extends Plugin {
             } finally { if (connection != null) connection.disconnect(); }
         }).start();
     }
+
+    private boolean ensureAccessToken() throws Exception {
+        loadStoredTokens();
+        if (libraryToken != null && System.currentTimeMillis() < libraryTokenExpiresAt - 60000) return true;
+        if (refreshToken == null || refreshToken.isBlank()) return false;
+        saveTokens(requestToken("grant_type=refresh_token&refresh_token=" + encode(refreshToken) + "&client_id=" + encode(CLIENT_ID)));
+        return libraryToken != null;
+    }
+
+    private JSONObject requestToken(String form) throws Exception {
+        HttpURLConnection connection = (HttpURLConnection) new URL("https://accounts.spotify.com/api/token").openConnection();
+        try {
+            connection.setRequestMethod("POST"); connection.setDoOutput(true); connection.setConnectTimeout(10000); connection.setReadTimeout(10000);
+            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+            try (OutputStream output = connection.getOutputStream()) { output.write(form.getBytes(StandardCharsets.UTF_8)); }
+            int status = connection.getResponseCode(); String body = readResponse(connection, status >= 400);
+            if (status < 200 || status >= 300) {
+                String message = body; try { message = new JSONObject(body).optString("error_description", body); } catch (Exception ignored) {}
+                throw new Exception("Spotify login failed: " + message);
+            }
+            return new JSONObject(body);
+        } finally { connection.disconnect(); }
+    }
+
+    private String readResponse(HttpURLConnection connection, boolean error) throws Exception {
+        InputStream stream = error ? connection.getErrorStream() : connection.getInputStream(); if (stream == null) return "";
+        StringBuilder body = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
+            String line; while ((line = reader.readLine()) != null) body.append(line);
+        }
+        return body.toString();
+    }
+
+    private void saveTokens(JSONObject token) {
+        libraryToken = token.optString("access_token", null); if (token.has("refresh_token")) refreshToken = token.optString("refresh_token", refreshToken);
+        libraryTokenExpiresAt = System.currentTimeMillis() + Math.max(60, token.optLong("expires_in", 3600)) * 1000L;
+        getContext().getSharedPreferences("fitquest_spotify", 0).edit().putString("access", libraryToken).putString("refresh", refreshToken).putLong("expires", libraryTokenExpiresAt).apply();
+    }
+
+    private void loadStoredTokens() {
+        if (libraryToken != null) return; android.content.SharedPreferences prefs = getContext().getSharedPreferences("fitquest_spotify", 0);
+        libraryToken = prefs.getString("access", null); refreshToken = prefs.getString("refresh", null); libraryTokenExpiresAt = prefs.getLong("expires", 0);
+    }
+
+    private void clearTokens() {
+        libraryToken = null; refreshToken = null; libraryTokenExpiresAt = 0; getContext().getSharedPreferences("fitquest_spotify", 0).edit().clear().apply();
+    }
+
+    private void finishAuthorization(PluginCall call) { call.setKeepAlive(false); pendingAuthorization = null; pkceVerifier = null; pkceState = null; }
+    private String encode(String value) { try { return URLEncoder.encode(value, "UTF-8"); } catch (Exception error) { throw new IllegalStateException(error); } }
 
     @PluginMethod
     public void openPlaylist(PluginCall call) {
