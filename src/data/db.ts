@@ -5,8 +5,8 @@ import { completeCampaignSessions, migratePlanForGymEquipment } from '../domain/
 
 export class FitQuestDB extends Dexie {
   profiles!:EntityTable<Profile,'id'>; campaigns!:EntityTable<Campaign,'id'>; plans!:EntityTable<PlanVersion,'id'>; workouts!:EntityTable<Workout,'id'>; checkIns!:EntityTable<CheckIn,'id'>; xpEvents!:EntityTable<XPEvent,'id'>; settings!:EntityTable<AppSettings,'id'>; metrics!:EntityTable<MetricObservation,'id'>; activities!:EntityTable<ActivityObservation,'id'>; meals!:EntityTable<Meal,'id'>; meditationSessions!:EntityTable<MeditationSession,'id'>; trainerExchanges!:EntityTable<TrainerExchange,'id'>
-  constructor(){
-    super('fitquest')
+  constructor(name='fitquest'){
+    super(name)
     this.version(1).stores({profiles:'id',campaigns:'id',plans:'id,createdAt',workouts:'id,localDate,planSessionId',checkIns:'id,localDate',xpEvents:'id,&key,localDate',settings:'id'})
     this.version(2).stores({profiles:'id',campaigns:'id',plans:'id,createdAt',workouts:'id,localDate,planSessionId',checkIns:'id,localDate',xpEvents:'id,&key,localDate',settings:'id',metrics:'id,localDate,type,[type+localDate]',activities:'id,localDate',meals:'id,localDate,createdAt'})
       .upgrade(async tx=>{const settings=await tx.table('settings').get('settings');if(settings)await tx.table('settings').put({...settings,notificationsEnabled:false,workoutReminder:null,quietStart:'22:00',quietEnd:'07:00',units:'metric'})})

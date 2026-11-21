@@ -1,6 +1,7 @@
 package app.fitquest.personal;
 
 import com.getcapacitor.JSObject;
+import com.getcapacitor.JSArray;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -8,6 +9,10 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.spotify.android.appremote.api.ConnectionParams;
 import com.spotify.android.appremote.api.Connector;
 import com.spotify.android.appremote.api.SpotifyAppRemote;
+import com.spotify.android.appremote.api.ContentApi;
+import com.spotify.protocol.types.ImageUri;
+import com.spotify.protocol.types.ListItem;
+import com.spotify.protocol.types.ListItems;
 
 @CapacitorPlugin(name = "Spotify")
 public class SpotifyPlugin extends Plugin {
@@ -77,6 +82,40 @@ public class SpotifyPlugin extends Plugin {
         JSObject result = new JSObject();
         result.put("connected", remote != null && remote.isConnected());
         call.resolve(result);
+    }
+
+    @PluginMethod
+    public void browse(PluginCall call) {
+        if (!requireConnection(call)) return;
+        String uri = call.getString("uri");
+        if (uri == null || uri.isBlank()) {
+            remote.getContentApi().getRecommendedContentItems(ContentApi.ContentType.DEFAULT)
+                .setResultCallback(items -> resolveItems(call, items))
+                .setErrorCallback(error -> call.reject(error.getMessage(), asException(error)));
+            return;
+        }
+        ListItem parent = new ListItem(
+            call.getString("id", uri), uri,
+            new ImageUri(call.getString("imageUri", "")),
+            call.getString("title", "Spotify"), call.getString("subtitle", ""),
+            call.getBoolean("playable", false), call.getBoolean("hasChildren", true)
+        );
+        remote.getContentApi().getChildrenOfItem(parent, 50, 0)
+            .setResultCallback(items -> resolveItems(call, items))
+            .setErrorCallback(error -> call.reject(error.getMessage(), asException(error)));
+    }
+
+    private void resolveItems(PluginCall call, ListItems items) {
+        JSArray output = new JSArray();
+        for (ListItem item : items.items) {
+            JSObject row = new JSObject();
+            row.put("id", item.id); row.put("uri", item.uri);
+            row.put("imageUri", item.imageUri == null ? "" : item.imageUri.raw);
+            row.put("title", item.title); row.put("subtitle", item.subtitle);
+            row.put("playable", item.playable); row.put("hasChildren", item.hasChildren);
+            output.put(row);
+        }
+        JSObject result = new JSObject(); result.put("items", output); call.resolve(result);
     }
 
     private boolean requireConnection(PluginCall call) {
