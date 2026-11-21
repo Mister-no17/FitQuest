@@ -1,10 +1,10 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { Profile, Campaign, PlanVersion, Workout, CheckIn, XPEvent, AppSettings, MetricObservation, ActivityObservation, Meal, TrainerExchange } from '../domain/types'
+import type { Profile, Campaign, PlanVersion, Workout, CheckIn, XPEvent, AppSettings, MetricObservation, ActivityObservation, Meal, MeditationSession, TrainerExchange } from '../domain/types'
 import { initialPlan } from '../domain/engine'
 import { completeCampaignSessions, migratePlanForGymEquipment } from '../domain/catalog'
 
 export class FitQuestDB extends Dexie {
-  profiles!:EntityTable<Profile,'id'>; campaigns!:EntityTable<Campaign,'id'>; plans!:EntityTable<PlanVersion,'id'>; workouts!:EntityTable<Workout,'id'>; checkIns!:EntityTable<CheckIn,'id'>; xpEvents!:EntityTable<XPEvent,'id'>; settings!:EntityTable<AppSettings,'id'>; metrics!:EntityTable<MetricObservation,'id'>; activities!:EntityTable<ActivityObservation,'id'>; meals!:EntityTable<Meal,'id'>; trainerExchanges!:EntityTable<TrainerExchange,'id'>
+  profiles!:EntityTable<Profile,'id'>; campaigns!:EntityTable<Campaign,'id'>; plans!:EntityTable<PlanVersion,'id'>; workouts!:EntityTable<Workout,'id'>; checkIns!:EntityTable<CheckIn,'id'>; xpEvents!:EntityTable<XPEvent,'id'>; settings!:EntityTable<AppSettings,'id'>; metrics!:EntityTable<MetricObservation,'id'>; activities!:EntityTable<ActivityObservation,'id'>; meals!:EntityTable<Meal,'id'>; meditationSessions!:EntityTable<MeditationSession,'id'>; trainerExchanges!:EntityTable<TrainerExchange,'id'>
   constructor(){
     super('fitquest')
     this.version(1).stores({profiles:'id',campaigns:'id',plans:'id,createdAt',workouts:'id,localDate,planSessionId',checkIns:'id,localDate',xpEvents:'id,&key,localDate',settings:'id'})
@@ -12,6 +12,7 @@ export class FitQuestDB extends Dexie {
       .upgrade(async tx=>{const settings=await tx.table('settings').get('settings');if(settings)await tx.table('settings').put({...settings,notificationsEnabled:false,workoutReminder:null,quietStart:'22:00',quietEnd:'07:00',units:'metric'})})
     this.version(3).stores({profiles:'id',campaigns:'id',plans:'id,createdAt',workouts:'id,localDate,planSessionId',checkIns:'id,localDate',xpEvents:'id,&key,localDate',settings:'id',metrics:'id,localDate,type,[type+localDate]',activities:'id,localDate',meals:'id,localDate,createdAt',trainerExchanges:'id,createdAt'})
       .upgrade(async tx=>{const settings=await tx.table('settings').get('settings');if(settings)await tx.table('settings').put({...settings,aiEnabled:false,aiModel:'openai/gpt-oss-20b'})})
+    this.version(4).stores({profiles:'id',campaigns:'id',plans:'id,createdAt',workouts:'id,localDate,planSessionId',checkIns:'id,localDate',xpEvents:'id,&key,localDate',settings:'id',metrics:'id,localDate,type,[type+localDate]',activities:'id,localDate',meals:'id,localDate,createdAt',meditationSessions:'id,localDate,state,[localDate+state]',trainerExchanges:'id,createdAt'})
   }
 }
 export const db=new FitQuestDB()

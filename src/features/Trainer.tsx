@@ -7,7 +7,7 @@ import { askGroq, TRAINER_MODEL } from '../services/groq'
 import { getGroqKey, hasGroqKey, isNativeSecureStorage, removeGroqKey, saveGroqKey } from '../services/secureKey'
 
 type Step='compose'|'select'|'preview'
-const groups:TrainerContextGroup[]=['Profile','Body measurements','Check-ins','Workouts','Exercise history','Nutrition','Activity','Pain & recovery','Notes','Previous AI messages']
+const groups:TrainerContextGroup[]=['Profile','Body measurements','Check-ins','Workouts','Exercise history','Meditation','Nutrition','Activity','Pain & recovery','Notes','Previous AI messages']
 
 export default function Trainer({data,onChange,onBack}:{data:TrainerData;onChange:()=>Promise<void>;onBack:()=>void}){
   const [step,setStep]=useState<Step>('compose'),[prompt,setPrompt]=useState(''),[category,setCategory]=useState<TrainerCategory>('training'),[selected,setSelected]=useState<Set<string>>(new Set()),[range,setRange]=useState<'all'|'latest'|'7'|'30'|'date'>('30'),[specificDate,setSpecificDate]=useState(''),[manual,setManual]=useState<TrainerManualAttachment[]>([]),[keyInput,setKeyInput]=useState(''),[keyReady,setKeyReady]=useState(false),[savingKey,setSavingKey]=useState(false),[sending,setSending]=useState(false),[error,setError]=useState(''),[localReply,setLocalReply]=useState<TrainerReply|null>(null)

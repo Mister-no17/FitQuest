@@ -1,7 +1,7 @@
 import { exerciseById } from './catalog'
-import type { ActivityObservation, CheckIn, Meal, MetricObservation, Profile, TrainerCategory, TrainerContextItem, TrainerExchange, TrainerManualAttachment, Workout } from './types'
+import type { ActivityObservation, CheckIn, Meal, MeditationSession, MetricObservation, Profile, TrainerCategory, TrainerContextItem, TrainerExchange, TrainerManualAttachment, Workout } from './types'
 
-export interface TrainerData { profile:Profile; metrics:MetricObservation[]; checkIns:CheckIn[]; workouts:Workout[]; activities:ActivityObservation[]; meals:Meal[]; exchanges:TrainerExchange[] }
+export interface TrainerData { profile:Profile; metrics:MetricObservation[]; checkIns:CheckIn[]; workouts:Workout[]; activities:ActivityObservation[]; meals:Meal[]; meditationSessions:MeditationSession[]; exchanges:TrainerExchange[] }
 
 export function classifyTrainerPrompt(prompt:string):TrainerCategory{
   const text=prompt.toLowerCase()
@@ -16,7 +16,7 @@ export function classifyTrainerPrompt(prompt:string):TrainerCategory{
 
 const recommended=(group:TrainerContextItem['group'], category:TrainerCategory)=>{
   const byCategory:Record<TrainerCategory,TrainerContextItem['group'][]>=
-    {training:['Profile','Check-ins','Workouts','Exercise history','Pain & recovery'],recovery:['Profile','Check-ins','Pain & recovery','Activity'],nutrition:['Profile','Body measurements','Nutrition','Activity'],exercise_form:['Profile','Exercise history','Pain & recovery'],progress:['Profile','Body measurements','Check-ins','Workouts','Exercise history','Nutrition','Activity'],out_of_scope:[]}
+    {training:['Profile','Check-ins','Workouts','Exercise history','Pain & recovery'],recovery:['Profile','Check-ins','Pain & recovery','Activity','Meditation'],nutrition:['Profile','Body measurements','Nutrition','Activity'],exercise_form:['Profile','Exercise history','Pain & recovery'],progress:['Profile','Body measurements','Check-ins','Workouts','Exercise history','Meditation','Nutrition','Activity'],out_of_scope:[]}
   return byCategory[category].includes(group)
 }
 
@@ -34,6 +34,7 @@ export function buildTrainerContext(data:TrainerData, category:TrainerCategory):
     for(const [exerciseId,sets] of grouped)add({id:`sets:${w.id}:${exerciseId}`,group:'Exercise history',label:`${exerciseById[exerciseId]?.name||exerciseId} · ${w.localDate}`,value:{sets:sets.map(s=>({kind:s.setKind||'working',loadKg:s.loadKg,reps:s.reps,durationSec:s.durationSec,rpe:s.rpe,rir:s.rir,feedback:s.feedback,activeDurationSec:s.activeDurationSec,targetDurationLowSec:s.targetDurationLowSec,targetDurationHighSec:s.targetDurationHighSec,completed:s.completed}))},date:w.localDate,source:'set log'})
   }
   for(const meal of data.meals.slice().sort((a,b)=>b.localDate.localeCompare(a.localDate)))add({id:`meal:${meal.id}`,group:'Nutrition',label:`${meal.name} · ${meal.localDate}`,value:{portion:meal.portion,calories:meal.calories,proteinG:meal.proteinG,carbsG:meal.carbsG,fatG:meal.fatG,confidence:meal.confidence,notes:meal.notes},date:meal.localDate,source:meal.source})
+  for(const session of data.meditationSessions.slice().sort((a,b)=>b.startedAt.localeCompare(a.startedAt)))add({id:`meditation:${session.id}`,group:'Meditation',label:`${session.state} meditation · ${session.localDate}`,value:{completedMinutes:Math.round(session.completedSeconds/6)/10,targetMinutes:Math.round(session.targetSeconds/6)/10,source:session.source,audio:session.audio},date:session.localDate,source:'meditation log'})
   for(const a of data.activities.slice().sort((x,y)=>y.localDate.localeCompare(x.localDate)))add({id:`activity:${a.id}`,group:'Activity',label:`Activity · ${a.localDate}`,value:{steps:a.steps,waterMl:a.waterMl,notes:a.notes},date:a.localDate,source:a.source})
   for(const e of data.exchanges.slice(-10).reverse())add({id:`ai:${e.id}`,group:'Previous AI messages',label:`Previous trainer reply · ${e.createdAt.slice(0,10)}`,value:{prompt:e.prompt,reply:e.reply.answer,category:e.reply.category},date:e.createdAt.slice(0,10),source:'Groq response saved locally'})
   return items

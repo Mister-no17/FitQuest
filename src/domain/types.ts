@@ -32,10 +32,11 @@ export type MetricType = 'weight'|'waist'|'chest'|'shoulders'|'body_fat'
 export interface MetricObservation { id:string; localDate:string; createdAt:string; type:MetricType; value:number; unit:'kg'|'cm'|'percent'; source:'manual'|'imported'; notes:string }
 export interface ActivityObservation { id:string; localDate:string; createdAt:string; steps:number|null; waterMl:number|null; source:'manual'|'imported'; notes:string }
 export interface Meal { id:string; localDate:string; createdAt:string; name:string; portion:string; calories:number|null; proteinG:number|null; carbsG:number|null; fatG:number|null; source:'manual_estimate'|'label'|'database'; confidence:'low'|'medium'|'high'; notes:string }
-export interface AppSettings { id:'settings'; theme:'light'|'dark'|'system'; notificationsEnabled:boolean; workoutReminder:string|null; quietStart:string; quietEnd:string; units:'metric'; aiEnabled?:boolean; aiModel?:'openai/gpt-oss-20b' }
+export interface MeditationSession { id:string; localDate:string; startedAt:string; endedAt?:string; targetSeconds:number; completedSeconds:number; state:'in_progress'|'partial'|'completed'; source:'manual'|'post_workout'|'rest_day'; audio:'silent'|'spotify' }
+export interface AppSettings { id:'settings'; theme:'light'|'dark'|'system'; notificationsEnabled:boolean; workoutReminder:string|null; quietStart:string; quietEnd:string; units:'metric'; aiEnabled?:boolean; aiModel?:'openai/gpt-oss-20b'; spotifyMeditationPlaylist?:string; spotifyWorkoutPlaylist?:string }
 
 export type TrainerCategory = 'training'|'recovery'|'nutrition'|'exercise_form'|'progress'|'out_of_scope'
-export type TrainerContextGroup = 'Profile'|'Body measurements'|'Check-ins'|'Workouts'|'Exercise history'|'Nutrition'|'Activity'|'Pain & recovery'|'Notes'|'Previous AI messages'
+export type TrainerContextGroup = 'Profile'|'Body measurements'|'Check-ins'|'Workouts'|'Exercise history'|'Meditation'|'Nutrition'|'Activity'|'Pain & recovery'|'Notes'|'Previous AI messages'
 export interface TrainerContextItem { id:string; group:TrainerContextGroup; label:string; value:string|number|boolean|null|Record<string,unknown>; date?:string; source:string; recommendedFor?:TrainerCategory[] }
 export interface TrainerManualAttachment { id:string; label:string; value:string; date?:string }
 export interface TrainerReply { category:TrainerCategory; answer:string; confidence:'low'|'medium'|'high'; evidence:string[]; suggestedAction:string }
