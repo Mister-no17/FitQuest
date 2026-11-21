@@ -52,8 +52,8 @@ function actualIntensityMet(session:PlannedSession,sets:ActualSet[]){
   if(session.kind!=='strength')return plannedMets(session)[0]
   const working=sets.filter(s=>s.completed&&isWorking(s))
   if(!working.length)return 2.5
-  const feedback=working.map(s=>s.feedback).filter(Boolean)
-  const effort=feedback.length?feedback.reduce((sum,value)=>sum+(value==='too_easy'?.9:value==='good'?1:value==='hard'?1.12:value==='form_broke'?1.05:.85),0)/feedback.length:1
+  const rated=working.filter(s=>s.rpe!==undefined||s.feedback)
+  const effort=rated.length?rated.reduce((sum,s)=>sum+(s.rpe!==undefined?clamp(1+(s.rpe-8)*.04,.88,1.08):s.feedback==='too_easy'?.9:s.feedback==='good'?1:s.feedback==='hard'?1.08:s.feedback==='form_broke'?1.03:.85),0)/rated.length:1
   const comparable=working.filter(s=>(s.loadKg??0)>0&&(s.suggestedLoadKg??0)>0)
   const loadRatio=comparable.length?comparable.reduce((sum,s)=>sum+clamp((s.loadKg??0)/(s.suggestedLoadKg??1),.7,1.3),0)/comparable.length:1
   const repRatio=working.reduce((sum,s)=>{const target=session.prescriptions.find(p=>p.exerciseId===s.exerciseId)?.targetReps??s.reps??1;return sum+clamp((s.reps??target)/target,.6,1.35)},0)/working.length

@@ -2,10 +2,10 @@ import { describe,expect,it } from 'vitest'
 import { campaignDay } from './dates'
 import { adaptPlan, canAddWorkingSet, initialPlan, nextSetDecision, progressionAdvice, readiness, suggestLoad } from './engine'
 import { exerciseById, migratePlanForGymEquipment } from './catalog'
-import type { CheckIn, Workout } from './types'
+import type { ActualSet, CheckIn, Workout } from './types'
 
 const now='2026-11-21T04:00:00.000Z'
-const set=(reps:number,rir:number|null,index=0)=>({id:`s${index}`,exerciseId:'flat-db-press',setIndex:index,reps,durationSec:null,loadKg:10,loadBasis:'each' as const,rir,completed:true,revision:1})
+const set=(reps:number,rir:number|null,index=0):ActualSet=>({id:`s${index}`,exerciseId:'flat-db-press',setIndex:index,reps,durationSec:null,loadKg:10,loadBasis:'each',rir,completed:true,revision:1})
 const workout=(date:string,sets=[set(12,2,0)]):Workout=>({id:`w-${date}-${sets.length}`,localDate:date,startedAt:now,endedAt:now,state:'completed',actualSets:sets,notes:''})
 
 describe('campaign dates',()=>{it('uses Asia/Kolkata local date boundaries',()=>{expect(campaignDay('2026-11-21')).toBe(1);expect(campaignDay('2026-12-20')).toBe(30)})})
@@ -33,9 +33,11 @@ describe('adaptation',()=>{
   it('turns illness into recovery without required activity',()=>{const check:CheckIn={id:'c',localDate:'2026-11-21',createdAt:now,sleepHours:null,energy:null,fatigue:null,soreness:{},pain:false,painMuscles:[],availableMinutes:null,unavailableReason:'illness',weightKg:null,notes:''};const plan=adaptPlan({today:'2026-11-21',current:initialPlan(now),workouts:[],checkIns:[check],nowIso:now});expect(plan.sessions[0].kind).toBe('recovery');expect(plan.sessions[0].prescriptions).toHaveLength(0);expect(plan.sessions[0].cardio).toContain('No activity required')})
   it('converts poor multi-signal readiness to recovery',()=>{const check:CheckIn={id:'c',localDate:'2026-11-21',createdAt:now,sleepHours:4,energy:1,fatigue:5,soreness:{chest:5},pain:false,painMuscles:[],availableMinutes:60,weightKg:null,notes:''};const plan=adaptPlan({today:'2026-11-21',current:initialPlan(now),workouts:[],checkIns:[check],nowIso:now});expect(plan.sessions[0].kind).toBe('recovery')})
   it('raises the next load after an easy set',()=>{const easy={...set(12,4),feedback:'too_easy' as const};expect(suggestLoad('flat-db-press',[workout('2026-11-21',[easy])],12).action).toBe('increase')})
+  it('uses RPE 1–10 for progression decisions',()=>{expect(suggestLoad('flat-db-press',[workout('2026-11-21',[{...set(12,4),rpe:5}])],12).action).toBe('increase');expect(suggestLoad('flat-db-press',[workout('2026-11-21',[{...set(10,1),rpe:9}])],12).action).toBe('reduce')})
   it('snaps dumbbell recommendations to the actual rack',()=>{const easy={...set(12,4),feedback:'too_easy' as const};expect(suggestLoad('flat-db-press',[workout('2026-11-21',[easy])],12).loadKg).toBe(12.5)})
   it('reduces load after form breakdown',()=>{const poor={...set(8,1),feedback:'form_broke' as const};expect(suggestLoad('flat-db-press',[workout('2026-11-21',[poor])],12).loadKg).toBeLessThan(10)})
   it('allows only safe optional volume',()=>{const good={...set(12,3),setKind:'working' as const,feedback:'good' as const};expect(canAddWorkingSet([good,good],2)).toBe(true);expect(canAddWorkingSet([{...good,feedback:'hard'}],1)).toBe(false)})
+  it('does not add optional volume after RPE 9 or 10',()=>{const hard={...set(12,1),setKind:'working' as const,rpe:9};expect(canAddWorkingSet([hard,hard],2)).toBe(false)})
   it('does not count calibration toward optional volume',()=>{const calibration={...set(12,4),setKind:'calibration' as const,feedback:'too_easy' as const};expect(canAddWorkingSet([calibration],1)).toBe(false)})
   it('stops immediately after pain feedback',()=>{const painful={...set(6,0),feedback:'pain' as const,setKind:'working' as const};expect(nextSetDecision('flat-db-press',[painful],2,[]).action).toBe('stop')})
   it('ends an exercise after large rep drop-off',()=>{const sets=[{...set(12,2,0),setKind:'working' as const,feedback:'good' as const},{...set(8,1,1),setKind:'working' as const,feedback:'hard' as const}];expect(nextSetDecision('flat-db-press',sets,3,[]).continueExercise).toBe(false)})

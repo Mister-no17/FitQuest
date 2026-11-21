@@ -17,7 +17,7 @@ export interface PlannedSession {
 export interface PlanVersion { id:string; createdAt:string; trigger:string; previousId?:string; sessions:PlannedSession[]; explanations:string[] }
 export type SetKind = 'calibration'|'warmup'|'working'|'backoff'
 export type SetFeedback = 'too_easy'|'good'|'hard'|'form_broke'|'pain'
-export interface ActualSet { id:string; exerciseId:string; setIndex:number; reps:number|null; durationSec:number|null; loadKg:number|null; loadBasis:'each'|'total'|'bodyweight'|null; rir:number|null; completed:boolean; setKind?:SetKind; feedback?:SetFeedback; suggestedLoadKg?:number|null; skippedReason?:string; revision:number }
+export interface ActualSet { id:string; exerciseId:string; setIndex:number; reps:number|null; durationSec:number|null; loadKg:number|null; loadBasis:'each'|'total'|'bodyweight'|null; rir:number|null; rpe?:number; completed:boolean; setKind?:SetKind; feedback?:SetFeedback; suggestedLoadKg?:number|null; skippedReason?:string; revision:number }
 export interface WorkoutEnergyEstimate {
   method:'met-v1'; bodyWeightKg:number; bodyWeightSource:'measurement'|'check_in'|'profile_estimate'; confidence:'low'|'medium';
   plannedKcal:number; plannedLowKcal:number; plannedHighKcal:number; plannedMinutes:number;
