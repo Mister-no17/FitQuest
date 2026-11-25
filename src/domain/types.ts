@@ -3,7 +3,7 @@ export type SessionState = 'planned'|'in_progress'|'completed'|'partial'|'unlogg
 
 export interface Profile {
   id: 'owner'; ageAtStart: number; heightCm: number; seedWeightKg: number; physiology: 'male'; timezone: 'Asia/Kolkata';
-  foodPreference: string; goals: string[]; waistCm: number|null; theme: 'light'|'dark'|'system'
+  foodPreference: string; goals: string[]; waistCm: number|null; theme: 'light'|'dark'|'system'; day3AttestationMigrated?:boolean
 }
 export interface Campaign { id:string; startDate:string; endDate:string; policyVersion:string }
 export interface Exercise {

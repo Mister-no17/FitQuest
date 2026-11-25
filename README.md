@@ -48,7 +48,11 @@ The installable APK is written to `android/app/build/outputs/apk/debug/app-debug
 
 ## Exercise guidance
 
-Every programmed exercise has a real looping ExerciseDB OSS demonstration with visible attribution. This app uses the documented personal/non-commercial tier; the media is fetched from ExerciseDB's CDN and cached by the production service worker after first use. Selected concise YouTube tutorials are embedded with `youtube-nocookie.com` only after the user opens them; other exercises link to a specific form search rather than presenting an unreviewed video as authoritative. External media remains optional and may change or disappear.
+Every programmed exercise has a matched looping demonstration and a selected YouTube technique guide. Most loops come from ExerciseDB OSS; a few use credited StrengthLog, SELF, or GIPHY media where ExerciseDB depicted a different variation. YouTube tutorials are embedded with `youtube-nocookie.com` only after the user opens them. External media needs internet and may change or disappear.
+
+Android updates keep the same `app.fitquest.personal` application ID, HTTPS Capacitor origin, and `fitquest` IndexedDB name. Install the new APK over the existing app without uninstalling or clearing storage. The Day 3 light workout confirmed by the owner is credited once on existing installs, even when its check-in is absent; the training calendar and dashboard both read that completion record. Export a backup from Settings before changing phones or removing the app.
+
+Earned XP is shown immediately in a brief on-screen message with the reason and new total. The header shows the saved total on every screen, and the dashboard shows recent awards.
 
 The first campaign is fixed to 21 Nov–20 Dec 2026. Starting weight is stored as a profile estimate—not an observation—and waist stays unknown until measured.
 

@@ -18,7 +18,7 @@ const current:Exercise[]=[
   e('incline-db-press','Incline dumbbell press','Dumbbells + fixed incline bench',['chest'],['triceps','shoulders'],12,'Keep shoulder blades gently set.',90,db,'each'),
   e('barbell-bench-press','Barbell bench press','Long barbell + bench press station',['chest'],['triceps','shoulders'],10,'Use safeties or a spotter, keep feet planted, and stop before form changes.',120,bar(15),'total'),
   e('db-fly','Dumbbell fly','Dumbbells + flat bench',['chest'],['shoulders'],12,'Use a light load and a comfortable arc; do not chase a deep stretch.',75,db,'each'),
-  e('db-shoulder-press','Dumbbell shoulder press','Dumbbells + fixed incline bench',['shoulders'],['triceps'],10,'Keep ribs down and avoid grinding reps.',90,db,'each'),
+  e('db-shoulder-press','Seated dumbbell shoulder press','Dumbbells + flat bench',['shoulders'],['triceps'],10,'Sit tall on the flat bench, brace your trunk, and avoid grinding reps.',90,db,'each'),
   e('lateral-raise','Dumbbell lateral raise','Dumbbells',['shoulders'],[],15,'Lift with control; lighter is fine.',60,db,'each'),
   e('barbell-triceps-extension','Lying barbell triceps extension','Short barbell + flat bench',['triceps'],[],12,'Start light, keep upper arms steady, and use a comfortable elbow range.',75,bar(7.5),'total'),
   e('one-arm-db-row','One-arm dumbbell row','Dumbbell + flat bench',['back'],['biceps'],12,'Brace on the bench and pull toward your hip without twisting.',90,db,'each'),
@@ -31,11 +31,11 @@ const current:Exercise[]=[
   e('barbell-back-squat','Barbell back squat','Long barbell + squat rack',['legs'],['core'],10,'Set rack safeties, brace, and use a depth you can control.',120,bar(15),'total'),
   e('db-step-up','Dumbbell step-up','Dumbbells + aerobic step',['legs'],['core'],10,'Use a stable step, drive through the working foot, and control the descent.',90,db,'each'),
   e('romanian-deadlift','Dumbbell Romanian deadlift','Dumbbells',['legs'],['back'],10,'Hinge with a long spine; stop before form changes.',90,db,'each'),
-  e('barbell-glute-bridge','Barbell glute bridge','Barbell + flat bench',['legs'],['core'],12,'Pad the bar, keep ribs down, and finish with the glutes.',90,bar(7.5),'total'),
+  e('barbell-glute-bridge','Barbell glute bridge','Barbell + floor',['legs'],['core'],12,'Rest your upper back on the floor, pad the bar at your hips, and lift without arching your lower back.',90,bar(7.5),'total'),
   e('db-standing-calf-raise','Dumbbell standing calf raise','Dumbbells + step',['calves'],[],15,'Use support for balance and pause at the top and bottom.',60,db,'each'),
   e('captains-chair-leg-raise','Captain’s chair knee raise','Captain’s chair',['core'],[],12,'Curl the pelvis without swinging; shorten the range if your back arches.',60,undefined,'bodyweight'),
   e('reverse-crunch','Reverse crunch','Bodyweight',['core'],[],12,'Curl the pelvis; avoid momentum.',60,undefined,'bodyweight'),
-  e('plank','Plank','Bodyweight',['core'],[],30,'Breathe and keep a comfortable neutral spine.',60,undefined,'bodyweight',true),
+  e('plank','High plank','Bodyweight',['core'],[],30,'Hands under shoulders; keep a straight line from shoulders to heels and breathe.',60,undefined,'bodyweight',true),
   e('dead-bug','Dead bug','Bodyweight',['core'],[],10,'Keep the lower back comfortably supported.',45,undefined,'bodyweight'),
   e('side-plank','Side plank','Bodyweight',['core'],[],30,'Use knees down if needed.',60,undefined,'bodyweight',true),
 ]
@@ -48,31 +48,31 @@ export const exercises=[...current,...legacy]
 
 const anchors=new Set(['incline-db-press','db-shoulder-press','one-arm-db-row','barbell-bent-row','goblet-squat','romanian-deadlift'])
 const make=(day:number,date:string,title:string,kind:PlannedSession['kind'],ids:string[],durationMin:number,cardio:string,muscles:PlannedSession['muscles']):PlannedSession=>({
-  id:`gym-${day}`,localDate:date,title,kind,muscles,durationMin,cardio,state:kind==='rest'?'scheduled_rest':kind==='recovery'?'active_recovery':'planned',sourceSeedDay:day,
+  id:`gym-${day}`,localDate:date,title,kind,muscles,durationMin:kind==='strength'&&!title.includes('Cardio')?90:durationMin,cardio,state:kind==='rest'?'scheduled_rest':kind==='recovery'?'active_recovery':'planned',sourceSeedDay:day,
   prescriptions:ids.map(id=>{const x=exercises.find(y=>y.id===id)!,role=anchors.has(id)?'anchor':'rotation';return {exerciseId:id,sets:2,targetReps:x.targetReps,loadKg:null,loadBasis:x.defaultLoadBasis??null,restSec:x.restSec,role,selectionReason:role==='anchor'?'Anchor retained for comparable progression':'Available-equipment rotation for balanced variation'} as Prescription}),
   rationale:day===1?['Returning after a 3–4 month break','Two comfortable working sets; leave 2–3 reps in reserve']:['Uses only equipment confirmed at your gym','Anchors preserve progression while compatible accessories rotate']
 })
 
 type T=[string,PlannedSession['kind'],string[],number,string,PlannedSession['muscles']]
 const base:T[]=[
- ['The Comeback','strength',['flat-db-press','incline-db-press','db-fly','db-shoulder-press','lateral-raise','barbell-triceps-extension'],60,'15–20 min easy treadmill walk',['chest','shoulders','triceps']],
+ ['The Comeback','strength',['incline-db-press','flat-db-press','db-shoulder-press','lateral-raise','db-fly','barbell-triceps-extension'],60,'15–20 min easy treadmill walk',['chest','shoulders','triceps']],
  ['Back, biceps & core','strength',['one-arm-db-row','barbell-bent-row','db-rear-delt-raise','db-curl','hammer-curl','reverse-crunch','plank'],60,'15–20 min easy elliptical',['back','biceps','core']],
  ['Active recovery','recovery',[],40,'35–45 min easy treadmill, elliptical, or spin bike',[]],
  ['Legs & core','strength',['goblet-squat','db-step-up','romanian-deadlift','barbell-glute-bridge','db-standing-calf-raise','captains-chair-leg-raise','plank'],60,'10–15 min easy spin bike',['legs','calves','core']],
  ['Upper body','strength',['incline-db-press','barbell-bench-press','one-arm-db-row','barbell-bent-row','lateral-raise','db-rear-delt-raise'],60,'15–20 min easy treadmill',['chest','back','shoulders']],
- ['Cardio & core','cardio',['reverse-crunch','dead-bug','side-plank'],45,'30–40 min easy/moderate elliptical or spin bike',['core']],
+ ['Legs, cardio & core','strength',['goblet-squat','romanian-deadlift','side-plank'],60,'20–25 min easy/moderate elliptical or spin bike',['legs','core']],
  ['Rest & reset','rest',[],0,'Optional gentle treadmill walk',[]],
 ]
-const pushA:T=['Push · variation A','strength',['incline-db-press','barbell-bench-press','db-fly','db-shoulder-press','lateral-raise','barbell-triceps-extension'],60,'15–20 min treadmill',['chest','shoulders','triceps']]
-const pushB:T=['Push · variation B','strength',['flat-db-press','incline-db-press','db-fly','db-shoulder-press','lateral-raise','barbell-triceps-extension'],60,'15–20 min treadmill',['chest','shoulders','triceps']]
-const pullA:T=['Pull · variation A','strength',['one-arm-db-row','barbell-bent-row','db-rear-delt-raise','hammer-curl','reverse-crunch','plank'],60,'15–20 min elliptical',['back','biceps','core']]
-const pullB:T=['Pull · variation B','strength',['one-arm-db-row','barbell-bent-row','db-rear-delt-raise','ez-bar-curl','captains-chair-leg-raise','plank'],60,'15–20 min elliptical',['back','biceps','core']]
+const pushA:T=['Push · variation A','strength',['incline-db-press','barbell-bench-press','db-shoulder-press','lateral-raise','db-fly','barbell-triceps-extension'],60,'15–20 min treadmill',['chest','shoulders','triceps']]
+const pushB:T=['Push · variation B','strength',['incline-db-press','flat-db-press','db-shoulder-press','lateral-raise','db-fly','barbell-triceps-extension'],60,'15–20 min treadmill',['chest','shoulders','triceps']]
+const pullA:T=['Pull · variation A','strength',['one-arm-db-row','barbell-bent-row','db-rear-delt-raise','db-curl','hammer-curl','reverse-crunch','plank'],60,'15–20 min elliptical',['back','biceps','core']]
+const pullB:T=['Pull · variation B','strength',['one-arm-db-row','barbell-bent-row','db-rear-delt-raise','ez-bar-curl','hammer-curl','captains-chair-leg-raise','plank'],60,'15–20 min elliptical',['back','biceps','core']]
 const recovery:T=['Active recovery','recovery',[],40,'35–45 min easy cardio of your choice',[]]
 const legsA:T=['Legs · variation A','strength',['goblet-squat','romanian-deadlift','db-step-up','barbell-glute-bridge','db-standing-calf-raise','dead-bug','side-plank'],60,'10–15 min spin bike',['legs','calves','core']]
 const legsB:T=['Legs · variation B','strength',['barbell-back-squat','romanian-deadlift','db-step-up','barbell-glute-bridge','db-standing-calf-raise','reverse-crunch','plank'],60,'10–15 min spin bike',['legs','calves','core']]
 const upperA:T=['Upper · variation A','strength',['incline-db-press','flat-db-press','one-arm-db-row','barbell-bent-row','lateral-raise','db-rear-delt-raise'],60,'15–20 min treadmill',['chest','back','shoulders']]
 const upperB:T=['Upper · variation B','strength',['barbell-bench-press','incline-db-press','one-arm-db-row','barbell-bent-row','db-rear-delt-raise','db-curl'],60,'15–20 min treadmill',['chest','back','shoulders','biceps']]
-const cardio:T=['Cardio & core','cardio',['captains-chair-leg-raise','dead-bug','side-plank'],45,'30–40 min elliptical or spin bike',['core']]
+const cardio:T=['Legs, cardio & core','strength',['goblet-squat','romanian-deadlift','side-plank'],60,'20–25 min easy/moderate elliptical or spin bike',['legs','core']]
 const rest:T=['Rest & reset','rest',[],0,'Optional gentle walk',[]]
 const days:T[]=[...base,pushA,pullA,recovery,legsA,upperA,cardio,rest,pushB,pullB,recovery,legsB,upperB,cardio,rest,pushA,pullA,recovery,legsB,upperA,cardio,rest,pushB,pullB]
 export const campaignSessions=days.map((d,i)=>make(i+1,addDays(CAMPAIGN_START,i),...d))

@@ -19,7 +19,7 @@ export const db=new FitQuestDB()
 export async function seedDatabase(nowIso:string){
   await db.transaction('rw',[db.profiles,db.campaigns,db.plans,db.workouts,db.settings],async()=>{
     if(!(await db.profiles.count())){
-      await db.profiles.add({id:'owner',ageAtStart:21,heightCm:177.8,seedWeightKg:86,physiology:'male',timezone:'Asia/Kolkata',foodPreference:'Jain vegetarian; flexible regular Indian food',goals:['Overall fat loss and reduced waist','Fuller chest and broader-looking shoulders','Stronger core and athletic fitness'],waistCm:null,theme:'light'})
+      await db.profiles.add({id:'owner',ageAtStart:21,heightCm:177.8,seedWeightKg:87.5,physiology:'male',timezone:'Asia/Kolkata',foodPreference:'Jain vegetarian; flexible regular Indian food',goals:['Overall fat loss and reduced waist','Fuller chest and broader-looking shoulders','Stronger core and athletic fitness'],waistCm:null,theme:'light',day3AttestationMigrated:true})
       await db.campaigns.add({id:'campaign-2026-11',startDate:'2026-11-21',endDate:'2026-12-20',policyVersion:'1.0'})
       await db.plans.add(initialPlan(nowIso))
       await db.settings.add({id:'settings',theme:'light',notificationsEnabled:false,workoutReminder:null,quietStart:'22:00',quietEnd:'07:00',units:'metric',aiEnabled:false,aiModel:'openai/gpt-oss-20b'})
@@ -33,11 +33,38 @@ export async function seedDatabase(nowIso:string){
       const workouts=await db.workouts.toArray()
       await db.plans.put({id:`plan-gym-v4-${Date.parse(nowIso)}`,createdAt:nowIso,trigger:'gym_equipment_v4',previousId:current.id,sessions:migratePlanForGymEquipment(current.sessions,workouts),explanations:['Future sessions now use only equipment confirmed at your gym','Any date with a workout log was preserved exactly, including its original exercises and prescription',...current.explanations]})
     }
+    const owner=await db.profiles.get('owner')
+    if(owner?.seedWeightKg===86)await db.profiles.put({...owner,seedWeightKg:87.5})
+    const latestPlan=await db.plans.orderBy('createdAt').last()
+    const hasAestheticMigration=(await db.plans.toArray()).some(plan=>plan.trigger==='aesthetic_balance_v3')
+    if(latestPlan&&!hasAestheticMigration){
+      const workouts=await db.workouts.toArray()
+      await db.plans.put({id:`plan-aesthetic-v3-${Date.parse(nowIso)}`,createdAt:nowIso,trigger:'aesthetic_balance_v3',previousId:latestPlan.id,sessions:migratePlanForGymEquipment(latestPlan.sessions,workouts),explanations:['Added a second light leg exposure alongside cardio and core','Placed compound presses and rows before raises and curls','Kept all dates with a workout log and their recorded sets unchanged',...latestPlan.explanations]})
+    }
   })
+  const owner=await db.profiles.get('owner')
+  if(owner&&!owner.day3AttestationMigrated){await creditAttestedDayThree();await db.profiles.put({...owner,day3AttestationMigrated:true})}
 }
 
-export async function awardXP(localDate:string,key:string,amount:number,reason:string){
-  const dayEvents=await db.xpEvents.where('localDate').equals(localDate).toArray(); const used=dayEvents.reduce((n,e)=>n+e.amount,0); const grant=Math.max(0,Math.min(amount,100-used));
+export async function creditAttestedDayThree(store:FitQuestDB=db){
+  const localDate='2026-11-23'
+  const workout=await store.workouts.where('localDate').equals(localDate).first()
+  if(workout?.state==='completed')return 0
+  return recordRecoveryCompletion(localDate,'day-3-user-attested','Day 3 light exercise completed (confirmed by you)',store)
+}
+
+export async function recordRecoveryCompletion(localDate:string,key:string,reason:string,store:FitQuestDB=db){
+  const existing=await store.xpEvents.where('localDate').equals(localDate).toArray()
+  if(existing.some(event=>event.key.startsWith(`${localDate}:recovery:`)))return 0
+  const granted=await awardXP(localDate,`recovery:${key}`,40,reason,store)
+  if(!granted&&!(await store.xpEvents.where('localDate').equals(localDate).toArray()).some(event=>event.key.startsWith(`${localDate}:recovery:`))){
+    await store.xpEvents.add({id:crypto.randomUUID(),localDate,key:`${localDate}:recovery:${key}`,amount:0,reason:`${reason} (daily XP cap already reached)`})
+  }
+  return granted
+}
+
+export async function awardXP(localDate:string,key:string,amount:number,reason:string,store:FitQuestDB=db){
+  const dayEvents=await store.xpEvents.where('localDate').equals(localDate).toArray(); const used=dayEvents.reduce((n,e)=>n+e.amount,0); const grant=Math.max(0,Math.min(amount,100-used));
   if(!grant) return 0
-  try{await db.xpEvents.add({id:crypto.randomUUID(),localDate,key:`${localDate}:${key}`,amount:grant,reason});return grant}catch{return 0}
+  try{await store.xpEvents.add({id:crypto.randomUUID(),localDate,key:`${localDate}:${key}`,amount:grant,reason});return grant}catch{return 0}
 }

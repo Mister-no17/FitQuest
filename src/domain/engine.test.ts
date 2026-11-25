@@ -1,7 +1,7 @@
 import { describe,expect,it } from 'vitest'
 import { campaignDay } from './dates'
 import { adaptPlan, canAddWorkingSet, initialPlan, nextSetDecision, progressionAdvice, readiness, suggestLoad } from './engine'
-import { exerciseById, migratePlanForGymEquipment } from './catalog'
+import { exerciseById, migratePlanForGymEquipment, substitutionPools } from './catalog'
 import type { ActualSet, CheckIn, Workout } from './types'
 
 const now='2026-11-21T04:00:00.000Z'
@@ -28,6 +28,9 @@ describe('readiness',()=>{
 })
 describe('adaptation',()=>{
   it('shortens time by removing accessories',()=>{const check:CheckIn={id:'c',localDate:'2026-11-21',createdAt:now,sleepHours:null,energy:null,fatigue:null,soreness:{},pain:false,painMuscles:[],availableMinutes:30,weightKg:null,notes:''};const plan=adaptPlan({today:'2026-11-21',current:initialPlan(now),workouts:[],checkIns:[check],nowIso:now});expect(plan.sessions[0].durationMin).toBe(30);expect(plan.sessions[0].prescriptions.length).toBeLessThan(6)})
+  it('restores the full day when available time is increased before starting',()=>{const check:CheckIn={id:'c',localDate:'2026-11-21',createdAt:now,sleepHours:null,energy:null,fatigue:null,soreness:{},pain:false,painMuscles:[],availableMinutes:30,weightKg:null,notes:''};const short=adaptPlan({today:check.localDate,current:initialPlan(now),workouts:[],checkIns:[check],nowIso:now});const full=adaptPlan({today:check.localDate,current:short,workouts:[],checkIns:[{...check,availableMinutes:90}],nowIso:now});expect(full.sessions[0].prescriptions.length).toBeGreaterThan(short.sessions[0].prescriptions.length);expect(full.sessions[0].durationMin).toBe(90)})
+  it('adds a second lower-body exposure with cardio in the weekly rotation',()=>{const week=initialPlan(now).sessions.slice(0,7);expect(week.filter(s=>s.prescriptions.some(p=>p.exerciseId==='goblet-squat'))).toHaveLength(2);expect(week[5].cardio).toContain('elliptical or spin bike')})
+  it('uses only confirmed gym equipment in the campaign and rotation pools',()=>{const ids=[...initialPlan(now).sessions.flatMap(s=>s.prescriptions.map(p=>p.exerciseId)),...Object.values(substitutionPools).flat()];expect(ids.every(id=>exerciseById[id]?.availableInGym===true)).toBe(true)})
   it('moves a confirmed miss without creating a double session',()=>{const current=initialPlan(now);current.sessions[1].state='missed';const plan=adaptPlan({today:'2026-11-23',current,workouts:[],checkIns:[],nowIso:now});expect(plan.sessions[2].title).toBe('Back, biceps & core');expect(plan.sessions[2].rationale.join(' ')).toContain('no double session')})
   it('removes painful muscle loading',()=>{const check:CheckIn={id:'c',localDate:'2026-11-21',createdAt:now,sleepHours:7,energy:3,fatigue:3,soreness:{},pain:true,painMuscles:['shoulders'],availableMinutes:60,weightKg:null,notes:''};const plan=adaptPlan({today:'2026-11-21',current:initialPlan(now),workouts:[],checkIns:[check],nowIso:now});expect(plan.sessions[0].prescriptions.some(p=>p.exerciseId==='db-shoulder-press')).toBe(false)})
   it('turns illness into recovery without required activity',()=>{const check:CheckIn={id:'c',localDate:'2026-11-21',createdAt:now,sleepHours:null,energy:null,fatigue:null,soreness:{},pain:false,painMuscles:[],availableMinutes:null,unavailableReason:'illness',weightKg:null,notes:''};const plan=adaptPlan({today:'2026-11-21',current:initialPlan(now),workouts:[],checkIns:[check],nowIso:now});expect(plan.sessions[0].kind).toBe('recovery');expect(plan.sessions[0].prescriptions).toHaveLength(0);expect(plan.sessions[0].cardio).toContain('No activity required')})

@@ -43,11 +43,28 @@ export function readiness(check?:CheckIn,recent:CheckIn[]=[]):ReadinessResult{
 function actualMuscles(workout:Workout):Set<Muscle>{const out=new Set<Muscle>();workingSets(workout.actualSets).forEach(s=>{const e=exerciseById[s.exerciseId];e?.primary.forEach(m=>out.add(m));e?.secondary.forEach(m=>out.add(m))});return out}
 function recentMuscleSets(workouts:Workout[],muscle:Muscle,from:string,to:string){return workouts.filter(w=>w.localDate>=from&&w.localDate<=to).flatMap(w=>workingSets(w.actualSets)).reduce((n,s)=>{const e=exerciseById[s.exerciseId];return n+(e?.primary.includes(muscle)?1:e?.secondary.includes(muscle)?.5:0)},0)}
 
+function fitStrengthToTime(session:PlannedSession,minutes:number){
+  const budget=Math.max(30,minutes), reserve=8, available=budget-reserve
+  const scored=session.prescriptions.map((p,index)=>({p,index,score:(p.role==='anchor'?5:0)+(exerciseById[p.exerciseId]?.primary.includes('back')?4:0)+(exerciseById[p.exerciseId]?.primary.includes('shoulders')?3:0)+(exerciseById[p.exerciseId]?.primary.includes('legs')?2:0)+(exerciseById[p.exerciseId]?.primary.includes('chest')?2:0)-index*.1}))
+  const chosen:typeof scored=[];let used=0
+  for(const item of scored.sort((a,b)=>b.score-a.score)){
+    const cost=2+item.p.sets*(.75+item.p.restSec/60)
+    if(used+cost<=available||!chosen.length){chosen.push(item);used+=cost}
+  }
+  session.prescriptions=chosen.sort((a,b)=>a.index-b.index).map(x=>x.p)
+  session.durationMin=budget
+  session.cardio=budget<=30?'3–5 min easy warm-up; optional easy walk later':budget<=45?'5 min easy warm-up; optional 5 min easy cardio finish':session.cardio
+  session.rationale.push(`${budget}-minute focus: ${session.prescriptions.length} priority exercises, ${session.prescriptions.reduce((n,p)=>n+p.sets,0)} working sets, with time for warm-up and transitions`)
+}
+
 export function adaptPlan(input:EngineInput):PlanVersion{
   const sessions=cloneSessions(completeCampaignSessions(input.current.sessions)),explanations:string[]=[]
   input.workouts.forEach(workout=>{const planned=sessions.find(s=>s.id===workout.planSessionId);if(planned)planned.state=workout.state})
-  const check=input.checkIns.find(c=>c.localDate===input.today),todaySession=sessions.find(s=>s.localDate===input.today),todayWorkout=input.workouts.find(w=>w.localDate===input.today)
+  const check=input.checkIns.find(c=>c.localDate===input.today),todayWorkout=input.workouts.find(w=>w.localDate===input.today)
+  let todaySession=sessions.find(s=>s.localDate===input.today)
   if(todaySession&&todayWorkout?.state==='in_progress')return input.current
+  // Rebuild an untouched day from its seed so editing a check-in can restore removed exercises.
+  if(todaySession&&!todayWorkout){const seed=campaignSessions.find(s=>s.localDate===input.today);if(seed){const index=sessions.indexOf(todaySession);sessions[index]={...seed,prescriptions:seed.prescriptions.map(p=>({...p})),rationale:[...seed.rationale],muscles:[...seed.muscles]};todaySession=sessions[index]}}
   const ready=readiness(check,input.checkIns.filter(c=>c.localDate<input.today).sort((a,b)=>a.localDate.localeCompare(b.localDate)))
 
   if(todaySession&&check){
@@ -55,7 +72,7 @@ export function adaptPlan(input:EngineInput):PlanVersion{
     if(check.pain&&todaySession.kind==='strength'){const affected=new Set(check.painMuscles),before=todaySession.prescriptions.length;todaySession.prescriptions=todaySession.prescriptions.filter(p=>{const e=exerciseById[p.exerciseId];return !e?.primary.some(m=>affected.has(m))&&!e?.secondary.some(m=>affected.has(m))});if(todaySession.prescriptions.length<before){todaySession.durationMin=Math.min(todaySession.durationMin,30);todaySession.rationale.push('Removed every movement directly or indirectly loading a painful area');explanations.push('Pain overrode the planned loading')}}
     if(todaySession.kind==='strength'&&ready.label==='Recover'&&!check.pain){todaySession.kind='recovery';todaySession.prescriptions=[];todaySession.durationMin=20;todaySession.state='active_recovery';todaySession.cardio='Optional easy movement or mobility only; no performance target';todaySession.rationale.push('Multiple recovery signals were below the training threshold');explanations.push('Low readiness converted strength work to recovery')}
     else if(todaySession.kind==='strength'&&ready.label==='Adjust'){todaySession.prescriptions=todaySession.prescriptions.map((p,i)=>({...p,sets:i<2?Math.max(1,Math.round(p.sets*ready.volumeMultiplier)):1,restSec:Math.round(p.restSec*1.15)}));todaySession.durationMin=Math.min(todaySession.durationMin,45);todaySession.rationale.push(`Readiness ${ready.score}%: reduced volume and increased rest`);explanations.push('Recovery signals reduced working volume without forcing inactivity')}
-    if(check.availableMinutes&&check.availableMinutes<todaySession.durationMin&&todaySession.kind==='strength'){const keep=Math.max(1,Math.floor((check.availableMinutes-7)/7));todaySession.prescriptions=todaySession.prescriptions.slice(0,keep);todaySession.durationMin=check.availableMinutes;todaySession.rationale.push(`Shortened to ${check.availableMinutes} minutes; priority exercises retained in original order`);explanations.push('Lower-priority accessories were removed for available time')}
+    if(check.availableMinutes&&check.availableMinutes<todaySession.durationMin&&todaySession.kind==='strength'){fitStrengthToTime(todaySession,check.availableMinutes);explanations.push(`Focused session fitted to ${todaySession.durationMin} minutes`)}
   }
 
   if(todaySession?.kind==='strength'){
@@ -65,7 +82,7 @@ export function adaptPlan(input:EngineInput):PlanVersion{
       const history=input.workouts.filter(w=>w.state!=='in_progress').sort((a,b)=>a.localDate.localeCompare(b.localDate)).flatMap(w=>workingSets(w.actualSets).filter(s=>s.exerciseId===p.exerciseId)),latest=history.at(-1),recentBreakdowns=history.slice(-2).filter(s=>s.feedback==='form_broke').length
       const trigger=latest?.feedback==='pain'?'pain was reported':recentBreakdowns>=2?'form broke on two recent exposures':p.role==='rotation'&&progressionAdvice(p.exerciseId,input.workouts).action==='deload'?'the rotating movement stalled across four exposures':null
       if(!trigger)return p
-      const replacement=(substitutionPools[p.exerciseId]||[]).find(id=>!occupied.has(id)&&!recentExerciseIds.has(id)&&exerciseById[id])
+      const replacement=(substitutionPools[p.exerciseId]||[]).find(id=>!occupied.has(id)&&!recentExerciseIds.has(id)&&exerciseById[id]?.availableInGym===true)
       if(!replacement)return p
       occupied.delete(p.exerciseId);occupied.add(replacement);explanations.push(`Replaced ${exerciseById[p.exerciseId]?.name} with ${exerciseById[replacement].name} because ${trigger}`)
       return {...p,exerciseId:replacement,targetReps:exerciseById[replacement].targetReps,restSec:exerciseById[replacement].restSec,loadKg:null,loadBasis:exerciseById[replacement].equipment==='Bodyweight'?'bodyweight':null,role:'rotation',selectionReason:`Substituted because ${trigger}; calibration starts the new movement`}
